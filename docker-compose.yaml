@@ -1,0 +1,102 @@
+
+services:
+  mongodb:
+    profiles: ["dev", "prod"]
+    image: mongo:7.0
+    container_name: akhaamulquran_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password123
+      MONGO_INITDB_DATABASE: akhaamulquran
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - akhaamulquran_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    profiles: ["dev", "prod"]
+    image: redis:7.2-alpine
+    container_name: akhaamulquran_redis
+    restart: unless-stopped
+    ports:
+      - "6378:6379"
+    command: redis-server --appendonly yes --requirepass redis_password123
+    volumes:
+      - redis_data:/data
+    networks:
+      - akhaamulquran_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_password123", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  clickhouse:
+    profiles: ["dev", "prod"]
+    image: clickhouse/clickhouse-server:24.1
+    container_name: akhaamulquran_clickhouse
+    restart: unless-stopped
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    environment:
+      CLICKHOUSE_DB: akhaamulquran
+      CLICKHOUSE_USER: akhaam_user
+      CLICKHOUSE_PASSWORD: clickhouse_password123
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks:
+      - akhaamulquran_network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  backend:
+    profiles: ["prod"]
+    build: .
+    container_name: akhaamulquran_backend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      MONGO_URI: mongodb://admin:password123@mongodb:27017/akhaamulquran?authSource=admin
+      REDIS_URL: redis://:redis_password123@redis:6379
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 9000
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - akhaamulquran_network
+
+volumes:
+  mongodb_data:
+  redis_data:
+  clickhouse_data:
+
+networks:
+  akhaamulquran_network:
+    driver: bridge
+    name: akhaamulquran_network
