@@ -27,7 +27,7 @@ const PORT = process.env.PORT || 4000
 
 ;(async () => {
   await connectMongoDB()
-  connectClickHouse()
+  // connectClickHouse()
   await emailConfig.verifyConnection()
 
   // 2. Run the seeder after DB connection, before server listen
